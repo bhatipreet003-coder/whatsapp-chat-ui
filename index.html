@@ -2,36 +2,40 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Private Chat</title>
+<title>Private Group Chat</title>
 <style>
 body{margin:0;font-family:Arial;background:#ece5dd}
-.header{background:#075e54;color:white;padding:14px;font-size:20px;font-weight:bold;display:flex;justify-content:space-between;align-items:center}
-.box{padding:10px;background:white;display:flex;gap:6px}
-.chat{height:72vh;overflow:auto;padding:12px}
-.msg{padding:10px 14px;border-radius:10px;margin:8px;max-width:70%;clear:both}
+.header{background:#075e54;color:white;padding:14px;font-size:19px;font-weight:bold;display:flex;justify-content:space-between;align-items:center}
+.top{padding:10px;background:white;display:flex;gap:6px}
+.chat{height:70vh;overflow:auto;padding:12px}
+.msg{padding:10px 14px;border-radius:10px;margin:8px;max-width:75%;clear:both}
 .left{background:white;float:left}
 .right{background:#dcf8c6;float:right}
 .name{font-size:11px;color:#555;margin-bottom:4px}
-.input{position:fixed;bottom:0;width:100%;display:flex;background:white;padding:10px;box-sizing:border-box}
+.msg img{max-width:220px;border-radius:10px;margin-top:5px}
+.input{position:fixed;bottom:0;width:100%;display:flex;background:white;padding:10px;box-sizing:border-box;gap:5px}
 input{flex:1;padding:12px;border-radius:20px;border:1px solid gray}
-button{background:#075e54;color:white;border:none;padding:10px 15px;border-radius:20px;margin-left:5px}
+button{background:#075e54;color:white;border:none;padding:10px 14px;border-radius:20px;cursor:pointer}
+.fileBtn{background:#128c7e}
 </style>
 </head>
 <body>
 
 <div class="header">
-  <div>Private WhatsApp Chat</div>
+  <div>Private Group Chat</div>
   <button id="loginBtn">Login</button>
 </div>
 
-<div class="box">
-  <input id="room" placeholder="Room code likho, jaise preet123">
+<div class="top">
+  <input id="room" placeholder="Room code: preet123">
   <button id="joinBtn">Join</button>
 </div>
 
 <div id="chat" class="chat"></div>
 
 <div class="input">
+  <input type="file" id="photoInput" accept="image/*" hidden>
+  <button class="fileBtn" id="photoBtn">📷</button>
   <input id="msg" placeholder="Type message...">
   <button id="sendBtn">Send</button>
 </div>
@@ -39,7 +43,7 @@ button{background:#075e54;color:white;border:none;padding:10px 15px;border-radiu
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
-import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCuy8Zu-lwJmqDV4WBz_QI-WfN_71dFi8Q",
@@ -57,6 +61,7 @@ const db = getFirestore(app);
 
 let currentUser = null;
 let currentRoom = localStorage.getItem("roomCode") || "";
+let unsubscribe = null;
 
 const loginBtn = document.getElementById("loginBtn");
 const joinBtn = document.getElementById("joinBtn");
@@ -64,74 +69,153 @@ const roomInput = document.getElementById("room");
 const msgInput = document.getElementById("msg");
 const sendBtn = document.getElementById("sendBtn");
 const chat = document.getElementById("chat");
+const photoBtn = document.getElementById("photoBtn");
+const photoInput = document.getElementById("photoInput");
 
 roomInput.value = currentRoom;
 
-loginBtn.onclick = async () => {
+loginBtn.onclick = async()=>{
   if(currentUser){ await signOut(auth); }
-  else{ await signInWithPopup(auth, new GoogleAuthProvider()); }
+  else{ await signInWithPopup(auth,new GoogleAuthProvider()); }
 };
 
-onAuthStateChanged(auth, user => {
-  currentUser = user;
-  loginBtn.innerText = user ? "Logout" : "Login";
+onAuthStateChanged(auth,user=>{
+  currentUser=user;
+  loginBtn.innerText=user?"Logout":"Login";
 });
 
-joinBtn.onclick = () => {
+joinBtn.onclick = async()=>{
+  if(!currentUser){ alert("Pehle Login karo"); return; }
+
   currentRoom = roomInput.value.trim();
   if(!currentRoom){ alert("Room code likho"); return; }
-  localStorage.setItem("roomCode", currentRoom);
+
+  const roomRef = doc(db,"rooms",currentRoom);
+  const snap = await getDoc(roomRef);
+
+  let members = [];
+  if(snap.exists()) members = snap.data().members || [];
+
+  if(!members.includes(currentUser.uid)){
+    if(members.length >= 3){
+      alert("Is room me already 3 members hain");
+      return;
+    }
+    members.push(currentUser.uid);
+    await setDoc(roomRef,{members:members},{merge:true});
+  }
+
+  localStorage.setItem("roomCode",currentRoom);
   loadMessages();
+  alert("Room joined: "+currentRoom);
 };
 
 async function sendMsg(){
   const text = msgInput.value.trim();
-
   if(!currentUser){ alert("Pehle Login karo"); return; }
   if(!currentRoom){ alert("Pehle Room join karo"); return; }
 
   if(text){
-    await addDoc(collection(db, "rooms", currentRoom, "messages"), {
-      text,
-      uid: currentUser.uid,
-      name: currentUser.displayName,
-      createdAt: serverTimestamp()
+    await addDoc(collection(db,"rooms",currentRoom,"messages"),{
+      type:"text",
+      text:text,
+      uid:currentUser.uid,
+      name:currentUser.displayName,
+      createdAt:serverTimestamp()
     });
-    msgInput.value = "";
+    msgInput.value="";
   }
 }
 
-sendBtn.onclick = sendMsg;
-msgInput.addEventListener("keydown", e => { if(e.key==="Enter") sendMsg(); });
+sendBtn.onclick=sendMsg;
+msgInput.addEventListener("keydown",e=>{ if(e.key==="Enter") sendMsg(); });
 
-function loadMessages(){
-  chat.innerHTML = "";
-  const q = query(collection(db, "rooms", currentRoom, "messages"), orderBy("createdAt"));
+photoBtn.onclick=()=>{
+  if(!currentUser){ alert("Pehle Login karo"); return; }
+  if(!currentRoom){ alert("Pehle Room join karo"); return; }
+  photoInput.click();
+};
 
-  onSnapshot(q, snapshot => {
-    chat.innerHTML = "";
-    snapshot.forEach(doc => {
-      const data = doc.data();
+photoInput.onchange=async(e)=>{
+  const file=e.target.files[0];
+  if(!file) return;
 
-      const div = document.createElement("div");
-      div.className = "msg " + (currentUser && data.uid === currentUser.uid ? "right" : "left");
+  const imgData = await compressImage(file);
 
-      const name = document.createElement("div");
-      name.className = "name";
-      name.innerText = data.name || "User";
+  await addDoc(collection(db,"rooms",currentRoom,"messages"),{
+    type:"image",
+    image:imgData,
+    uid:currentUser.uid,
+    name:currentUser.displayName,
+    createdAt:serverTimestamp()
+  });
 
-      const text = document.createElement("div");
-      text.innerText = data.text;
+  photoInput.value="";
+};
 
-      div.appendChild(name);
-      div.appendChild(text);
-      chat.appendChild(div);
-    });
-    chat.scrollTop = chat.scrollHeight;
+function compressImage(file){
+  return new Promise((resolve)=>{
+    const reader=new FileReader();
+    reader.onload=function(ev){
+      const img=new Image();
+      img.onload=function(){
+        const canvas=document.createElement("canvas");
+        const max=700;
+        let w=img.width,h=img.height;
+
+        if(w>h && w>max){ h*=max/w; w=max; }
+        else if(h>max){ w*=max/h; h=max; }
+
+        canvas.width=w;
+        canvas.height=h;
+        const ctx=canvas.getContext("2d");
+        ctx.drawImage(img,0,0,w,h);
+
+        resolve(canvas.toDataURL("image/jpeg",0.55));
+      };
+      img.src=ev.target.result;
+    };
+    reader.readAsDataURL(file);
   });
 }
 
-if(currentRoom) loadMessages();
+function loadMessages(){
+  if(unsubscribe) unsubscribe();
+
+  const q=query(collection(db,"rooms",currentRoom,"messages"),orderBy("createdAt"));
+
+  unsubscribe=onSnapshot(q,snapshot=>{
+    chat.innerHTML="";
+
+    snapshot.forEach(doc=>{
+      const data=doc.data();
+
+      const div=document.createElement("div");
+      div.className="msg "+(currentUser && data.uid===currentUser.uid?"right":"left");
+
+      const name=document.createElement("div");
+      name.className="name";
+      name.innerText=data.name || "User";
+      div.appendChild(name);
+
+      if(data.type==="image"){
+        const img=document.createElement("img");
+        img.src=data.image;
+        div.appendChild(img);
+      }else{
+        const text=document.createElement("div");
+        text.innerText=data.text;
+        div.appendChild(text);
+      }
+
+      chat.appendChild(div);
+    });
+
+    chat.scrollTop=chat.scrollHeight;
+  });
+}
+
+if(currentRoom && currentUser) loadMessages();
 </script>
 
 </body>
