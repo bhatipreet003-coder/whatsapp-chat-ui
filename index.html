@@ -1,89 +1,124 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>WhatsApp Style</title>
+<meta charset="UTF-8">
+<title>Live WhatsApp Chat</title>
 <style>
-body{
-margin:0;
-background:#ece5dd;
-font-family:Arial;
-}
-.header{
-background:#075E54;
-color:white;
-padding:15px;
-font-size:22px;
-font-weight:bold;
-}
-.chat{
-padding:15px;
-}
-.left,.right{
-padding:10px 15px;
-border-radius:10px;
-margin:10px;
-display:inline-block;
-max-width:70%;
-}
-.left{
-background:white;
-}
-.right{
-background:#DCF8C6;
-float:right;
-clear:both;
-}
-.input{
-position:fixed;
-bottom:0;
-width:100%;
-display:flex;
-background:white;
-padding:10px;
-}
-input{
-flex:1;
-padding:10px;
-border-radius:20px;
-border:1px solid gray;
-}
-button{
-background:#075E54;
-color:white;
-border:none;
-padding:10px 20px;
-border-radius:20px;
-margin-left:5px;
-}
+body{margin:0;font-family:Arial;background:#ece5dd}
+.header{background:#075e54;color:white;padding:15px;font-size:22px;font-weight:bold;display:flex;justify-content:space-between;align-items:center}
+.chat{height:78vh;overflow-y:auto;padding:15px}
+.msg{padding:10px 14px;border-radius:10px;margin:8px;max-width:70%;clear:both}
+.left{background:white;float:left}
+.right{background:#dcf8c6;float:right}
+.name{font-size:11px;color:#555;margin-bottom:4px}
+.input{position:fixed;bottom:0;width:100%;display:flex;background:white;padding:10px;box-sizing:border-box}
+input{flex:1;padding:12px;border-radius:20px;border:1px solid gray}
+button{background:#075e54;color:white;border:none;padding:10px 18px;border-radius:20px;margin-left:6px;cursor:pointer}
 </style>
 </head>
-
 <body>
 
 <div class="header">
-WhatsApp Clone
+  <div>WhatsApp Live Chat</div>
+  <button id="loginBtn">Login</button>
 </div>
 
-<div class="chat" id="chat">
-<div class="left">Hello 👋</div><br>
-<div class="right">Hi 😊</div><br>
-<div class="left">Kaise ho?</div>
-</div>
+<div class="chat" id="chat"></div>
 
 <div class="input">
-<input type="text" id="msg" placeholder="Type message...">
-<button onclick="send()">Send</button>
+  <input id="msg" placeholder="Type message..." />
+  <button id="sendBtn">Send</button>
 </div>
 
-<script>
-function send(){
-var x=document.getElementById("msg").value;
-if(x!=""){
-document.getElementById("chat").innerHTML+=
-"<br><div class='right'>"+x+"</div><br>";
-document.getElementById("msg").value="";
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
+import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCuy8Zu-lwJmqDV4WBz_QI-WfN_71dFi8Q",
+  authDomain: "whatsapp-chat-ui.firebaseapp.com",
+  projectId: "whatsapp-chat-ui",
+  storageBucket: "whatsapp-chat-ui.firebasestorage.app",
+  messagingSenderId: "997794339112",
+  appId: "1:997794339112:web:c66d6ccc3d117b97f4d81d",
+  measurementId: "G-BVY9MW4W77"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+let currentUser = null;
+
+const loginBtn = document.getElementById("loginBtn");
+const sendBtn = document.getElementById("sendBtn");
+const msgInput = document.getElementById("msg");
+const chat = document.getElementById("chat");
+
+loginBtn.onclick = async () => {
+  if(currentUser){
+    await signOut(auth);
+  }else{
+    await signInWithPopup(auth, new GoogleAuthProvider());
+  }
+};
+
+onAuthStateChanged(auth, user => {
+  currentUser = user;
+  loginBtn.innerText = user ? "Logout" : "Login";
+});
+
+async function sendMsg(){
+  const text = msgInput.value.trim();
+
+  if(!currentUser){
+    alert("Pehle Login karo");
+    return;
+  }
+
+  if(text !== ""){
+    await addDoc(collection(db, "messages"), {
+      text:text,
+      uid:currentUser.uid,
+      name:currentUser.displayName,
+      createdAt:serverTimestamp()
+    });
+    msgInput.value = "";
+  }
 }
-}
+
+sendBtn.onclick = sendMsg;
+
+msgInput.addEventListener("keydown", function(e){
+  if(e.key === "Enter") sendMsg();
+});
+
+const q = query(collection(db, "messages"), orderBy("createdAt"));
+
+onSnapshot(q, snapshot => {
+  chat.innerHTML = "";
+
+  snapshot.forEach(doc => {
+    const data = doc.data();
+
+    const div = document.createElement("div");
+    div.className = "msg " + (currentUser && data.uid === currentUser.uid ? "right" : "left");
+
+    const name = document.createElement("div");
+    name.className = "name";
+    name.innerText = data.name || "User";
+
+    const text = document.createElement("div");
+    text.innerText = data.text;
+
+    div.appendChild(name);
+    div.appendChild(text);
+    chat.appendChild(div);
+  });
+
+  chat.scrollTop = chat.scrollHeight;
+});
 </script>
 
 </body>
