@@ -1,222 +1,114 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Private Group Chat</title>
-<style>
-body{margin:0;font-family:Arial;background:#ece5dd}
-.header{background:#075e54;color:white;padding:14px;font-size:19px;font-weight:bold;display:flex;justify-content:space-between;align-items:center}
-.top{padding:10px;background:white;display:flex;gap:6px}
-.chat{height:70vh;overflow:auto;padding:12px}
-.msg{padding:10px 14px;border-radius:10px;margin:8px;max-width:75%;clear:both}
-.left{background:white;float:left}
-.right{background:#dcf8c6;float:right}
-.name{font-size:11px;color:#555;margin-bottom:4px}
-.msg img{max-width:220px;border-radius:10px;margin-top:5px}
-.input{position:fixed;bottom:0;width:100%;display:flex;background:white;padding:10px;box-sizing:border-box;gap:5px}
-input{flex:1;padding:12px;border-radius:20px;border:1px solid gray}
-button{background:#075e54;color:white;border:none;padding:10px 14px;border-radius:20px;cursor:pointer}
-.fileBtn{background:#128c7e}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My WhatsApp Clone</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 </head>
-<body>
+<body class="bg-gray-100 h-screen flex flex-col justify-between font-sans">
 
-<div class="header">
-  <div>Private Group Chat</div>
-  <button id="loginBtn">Login</button>
-</div>
+    <div class="bg-teal-600 text-white p-4 shadow-md flex justify-between items-center">
+        <h1 class="text-xl font-bold">💬 Our Private Chat</h1>
+        <span id="user-display" class="text-sm bg-teal-700 px-3 py-1 rounded"></span>
+    </div>
 
-<div class="top">
-  <input id="room" placeholder="Room code: preet123">
-  <button id="joinBtn">Join</button>
-</div>
+    <div id="chat-box" class="flex-1 p-4 overflow-y-auto space-y-4 bg-amber-50" style="background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png');">
+        </div>
 
-<div id="chat" class="chat"></div>
+    <form id="chat-form" class="bg-gray-200 p-4 flex items-center gap-2 shadow-inner">
+        <label class="bg-gray-300 hover:bg-gray-400 p-2 rounded-full cursor-pointer transition">
+            📁
+            <input type="file" id="image-input" accept="image/*" class="hidden">
+        </label>
+        
+        <input type="text" id="message-input" placeholder="Type a message..." class="flex-1 p-2 rounded-lg border border-gray-300 focus:outline-none focus:border-teal-500" required>
+        
+        <button type="submit" class="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded-lg font-semibold transition">
+            Send
+        </button>
+    </form>
 
-<div class="input">
-  <input type="file" id="photoInput" accept="image/*" hidden>
-  <button class="fileBtn" id="photoBtn">📷</button>
-  <input id="msg" placeholder="Type message...">
-  <button id="sendBtn">Send</button>
-</div>
+    <script>
+        // 1. Firebase Configuration (Temporary Public Database for testing)
+        const firebaseConfig = {
+            databaseURL: "https://whatsapp-clone-demo-default-rtdb.firebaseio.com/"
+        };
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
-import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+        // 2. Ask for Username
+        let username = prompt("Apna naam likhein (Enter your name):");
+        if (!username) username = "Anonymous User";
+        document.getElementById('user-display').innerText = "Logged in as: " + username;
 
-const firebaseConfig = {
-  apiKey: "AIzaSyCuy8Zu-lwJmqDV4WBz_QI-WfN_71dFi8Q",
-  authDomain: "whatsapp-chat-ui.firebaseapp.com",
-  projectId: "whatsapp-chat-ui",
-  storageBucket: "whatsapp-chat-ui.firebasestorage.app",
-  messagingSenderId: "997794339112",
-  appId: "1:997794339112:web:c66d6ccc3d117b97f4d81d",
-  measurementId: "G-BVY9MW4W77"
-};
+        const chatBox = document.getElementById('chat-box');
+        const chatForm = document.getElementById('chat-form');
+        const messageInput = document.getElementById('message-input');
+        const imageInput = document.getElementById('image-input');
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+        // 3. Handle Sending Message & Images
+        chatForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const text = messageInput.value.trim();
+            const file = imageInput.files[0];
 
-let currentUser = null;
-let currentRoom = localStorage.getItem("roomCode") || "";
-let unsubscribe = null;
+            if (file) {
+                // Convert image to Base64 string to store in Database
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    database.ref('messages').push({
+                        sender: username,
+                        text: text || "Sent a photo",
+                        image: event.target.result,
+                        timestamp: Date.now()
+                    });
+                };
+                reader.readAsDataURL(file);
+                imageInput.value = ""; // clear file input
+            } else if (text) {
+                // Send only text
+                database.ref('messages').push({
+                    sender: username,
+                    text: text,
+                    image: null,
+                    timestamp: Date.now()
+                });
+            }
 
-const loginBtn = document.getElementById("loginBtn");
-const joinBtn = document.getElementById("joinBtn");
-const roomInput = document.getElementById("room");
-const msgInput = document.getElementById("msg");
-const sendBtn = document.getElementById("sendBtn");
-const chat = document.getElementById("chat");
-const photoBtn = document.getElementById("photoBtn");
-const photoInput = document.getElementById("photoInput");
+            messageInput.value = ""; // clear text input
+        });
 
-roomInput.value = currentRoom;
+        // 4. Listen for Real-time Messages from Firebase
+        database.ref('messages').limitToLast(50).on('child_added', (snapshot) => {
+            const data = snapshot.val();
+            displayMessage(data);
+        });
 
-loginBtn.onclick = async()=>{
-  if(currentUser){ await signOut(auth); }
-  else{ await signInWithPopup(auth,new GoogleAuthProvider()); }
-};
+        // 5. Display Message function
+        function displayMessage(data) {
+            const isMe = data.sender === username;
+            const messageDiv = document.createElement('div');
+            
+            // Layout styling based on who sent the message
+            messageDiv.className = `flex ${isMe ? 'justify-end' : 'justify-start'} w-full`;
 
-onAuthStateChanged(auth,user=>{
-  currentUser=user;
-  loginBtn.innerText=user?"Logout":"Login";
-});
+            let imageHtml = data.image ? `<img src="${data.image}" class="rounded-lg max-w-xs my-2 shadow" />` : '';
 
-joinBtn.onclick = async()=>{
-  if(!currentUser){ alert("Pehle Login karo"); return; }
+            messageDiv.innerHTML = `
+                <div class="${isMe ? 'bg-teal-100 text-gray-800' : 'bg-white text-gray-800'} p-3 rounded-xl max-w-md shadow-md relative">
+                    <span class="block text-xs font-bold text-teal-700 mb-1">${data.sender}</span>
+                    ${imageHtml}
+                    <p class="text-sm break-words">${data.text}</p>
+                </div>
+            `;
 
-  currentRoom = roomInput.value.trim();
-  if(!currentRoom){ alert("Room code likho"); return; }
-
-  const roomRef = doc(db,"rooms",currentRoom);
-  const snap = await getDoc(roomRef);
-
-  let members = [];
-  if(snap.exists()) members = snap.data().members || [];
-
-  if(!members.includes(currentUser.uid)){
-    if(members.length >= 3){
-      alert("Is room me already 3 members hain");
-      return;
-    }
-    members.push(currentUser.uid);
-    await setDoc(roomRef,{members:members},{merge:true});
-  }
-
-  localStorage.setItem("roomCode",currentRoom);
-  loadMessages();
-  alert("Room joined: "+currentRoom);
-};
-
-async function sendMsg(){
-  const text = msgInput.value.trim();
-  if(!currentUser){ alert("Pehle Login karo"); return; }
-  if(!currentRoom){ alert("Pehle Room join karo"); return; }
-
-  if(text){
-    await addDoc(collection(db,"rooms",currentRoom,"messages"),{
-      type:"text",
-      text:text,
-      uid:currentUser.uid,
-      name:currentUser.displayName,
-      createdAt:serverTimestamp()
-    });
-    msgInput.value="";
-  }
-}
-
-sendBtn.onclick=sendMsg;
-msgInput.addEventListener("keydown",e=>{ if(e.key==="Enter") sendMsg(); });
-
-photoBtn.onclick=()=>{
-  if(!currentUser){ alert("Pehle Login karo"); return; }
-  if(!currentRoom){ alert("Pehle Room join karo"); return; }
-  photoInput.click();
-};
-
-photoInput.onchange=async(e)=>{
-  const file=e.target.files[0];
-  if(!file) return;
-
-  const imgData = await compressImage(file);
-
-  await addDoc(collection(db,"rooms",currentRoom,"messages"),{
-    type:"image",
-    image:imgData,
-    uid:currentUser.uid,
-    name:currentUser.displayName,
-    createdAt:serverTimestamp()
-  });
-
-  photoInput.value="";
-};
-
-function compressImage(file){
-  return new Promise((resolve)=>{
-    const reader=new FileReader();
-    reader.onload=function(ev){
-      const img=new Image();
-      img.onload=function(){
-        const canvas=document.createElement("canvas");
-        const max=700;
-        let w=img.width,h=img.height;
-
-        if(w>h && w>max){ h*=max/w; w=max; }
-        else if(h>max){ w*=max/h; h=max; }
-
-        canvas.width=w;
-        canvas.height=h;
-        const ctx=canvas.getContext("2d");
-        ctx.drawImage(img,0,0,w,h);
-
-        resolve(canvas.toDataURL("image/jpeg",0.55));
-      };
-      img.src=ev.target.result;
-    };
-    reader.readAsDataURL(file);
-  });
-}
-
-function loadMessages(){
-  if(unsubscribe) unsubscribe();
-
-  const q=query(collection(db,"rooms",currentRoom,"messages"),orderBy("createdAt"));
-
-  unsubscribe=onSnapshot(q,snapshot=>{
-    chat.innerHTML="";
-
-    snapshot.forEach(doc=>{
-      const data=doc.data();
-
-      const div=document.createElement("div");
-      div.className="msg "+(currentUser && data.uid===currentUser.uid?"right":"left");
-
-      const name=document.createElement("div");
-      name.className="name";
-      name.innerText=data.name || "User";
-      div.appendChild(name);
-
-      if(data.type==="image"){
-        const img=document.createElement("img");
-        img.src=data.image;
-        div.appendChild(img);
-      }else{
-        const text=document.createElement("div");
-        text.innerText=data.text;
-        div.appendChild(text);
-      }
-
-      chat.appendChild(div);
-    });
-
-    chat.scrollTop=chat.scrollHeight;
-  });
-}
-
-if(currentRoom && currentUser) loadMessages();
-</script>
-
+            chatBox.appendChild(messageDiv);
+            chatBox.scrollTop = chatBox.scrollHeight; // Auto scroll to bottom
+        }
+    </script>
 </body>
 </html>
